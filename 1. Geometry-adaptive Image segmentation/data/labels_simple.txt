@@ -1,0 +1,12 @@
+_ignore_
+roofplane
+hip
+chimney
+wall
+window
+stone carving
+door
+glass house
+balcony
+pediment
+railing
