@@ -20,15 +20,6 @@ import torch.nn.functional as F
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# CLASSES = ['roof',
-#             'wall',
-#             'window',
-#             'stone carving',
-#             'door',
-#             'glass',
-#             'balcony',
-#             'chimeny']
-
 
 
 data = open('data/labels_simple.txt','r').readlines()
