@@ -29,9 +29,8 @@ class Logger(object):
 # --- 数据集和模型配置 ---
 DATA_DIR = 'data/512/'
 ENCODER_NAME = 'se_resnext50_32x4d'
-PRETRAINED_PATH = 'weights/DeepLaV3+_DECA.pth'
-# PRETRAINED_PATH = 'weights/se_resnext50_32x4d-a260b3a4.pth'
-# PRETRAINED_PATH = None
+# PRETRAINED_PATH = 'weights/DeepLaV3+_DECA.pth'
+PRETRAINED_PATH = 'weights/se_resnext50_32x4d-a260b3a4.pth'
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
