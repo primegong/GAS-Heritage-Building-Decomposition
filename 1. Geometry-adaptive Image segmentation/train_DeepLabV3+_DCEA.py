@@ -29,11 +29,9 @@ class Logger(object):
 # --- 数据集和模型配置 ---
 DATA_DIR = 'data/512/'
 ENCODER_NAME = 'se_resnext50_32x4d'
-ENCODER_WEIGHTS = None
 PRETRAINED_PATH = 'weights/DeepLaV3+_DECA.pth'
 # PRETRAINED_PATH = 'weights/se_resnext50_32x4d-a260b3a4.pth'
 # PRETRAINED_PATH = None
-ACTIVATION = 'softmax'
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -47,48 +45,7 @@ except FileNotFoundError:
     CLASSES = ['background', 'class1', 'class2']
 
 
-class LargeKernelDeformConv(nn.Module):
-    """
-    大核 Deformable Convolution v2
-    - in_channels: 输入通道
-    - out_channels: 输出通道
-    - kernel_size: 大卷积核 (推荐 7, 9, 11)
-    - stride: 步幅
-    - padding: 自动设置，保证输出大小一致
-    """
-    def __init__(self, in_channels, out_channels, kernel_size=7, stride=1, bias=False):
-        super(LargeKernelDeformConv, self).__init__()
-        self.kernel_size = kernel_size
-        self.padding = kernel_size // 2
 
-        # offset conv 生成 2*k*k 偏移量
-        self.offset_conv = nn.Conv2d(
-            in_channels,
-            2 * kernel_size * kernel_size,
-            kernel_size=3,
-            padding=1,
-            stride=stride,
-        )
-
-        # Deformable Convolution
-        self.deform_conv = DeformConv2d(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=self.padding,
-            bias=bias,
-        )
-
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        offset = self.offset_conv(x)
-        out = self.deform_conv(x, offset)
-        out = self.bn(out)
-        out = self.relu(out)
-        return out
 
 
 class DeformConv(nn.Module):
@@ -303,7 +260,7 @@ class DeepLabV3Plus_DEConv(nn.Module):
         )
         self._modify_encoder()
 
-        if encoder_weights_path and os.path.exists(encoder_weights_path):
+        if os.path.exists(encoder_weights_path):
             print(f"Loading local pretrained weights from: {encoder_weights_path}")
             try:
                 state_dict = torch.load(encoder_weights_path, map_location=DEVICE)
@@ -380,22 +337,6 @@ class Dataset(BaseDataset):
     def __len__(self):
         return len(self.ids)
 
-# def get_training_augmentation():
-#     train_transform = [
-#         albu.HorizontalFlip(p=0.5),
-#         albu.Affine(scale=(0.5, 1.5), translate_percent=0.1, rotate=0, p=1, fill_value=0, mask_fill_value=0),
-#         albu.PadIfNeeded(min_height=512, min_width=512, p=1.0, border_mode=0),
-# https://errors.pydantic.dev/2.10/v/value_error        albu.RandomCrop(height=512, width=512, p=1.0),
-#         albu.GaussNoise(p=0.2),
-#         albu.Perspective(p=0.5),
-#         albu.OneOf([albu.CLAHE(p=1), albu.RandomBrightnessContrast(p=1), albu.RandomGamma(p=1)], p=0.9),
-#         albu.OneOf([albu.Sharpen(p=1), albu.Blur(blur_limit=3, p=1), albu.MotionBlur(blur_limit=3, p=1)], p=0.9),
-#         albu.OneOf([albu.RandomBrightnessContrast(p=1), albu.HueSaturationValue(p=1)], p=0.9),
-#     ]
-#     return albu.Compose(train_transform)
-
-# def get_validation_augmentation():
-#     return albu.Compose([albu.PadIfNeeded(min_height=512, min_width=512, border_mode=cv2.BORDER_CONSTANT, border_value=0)])
 
 
 # ---------------------------------------------------------------
@@ -471,7 +412,7 @@ if __name__ == '__main__':
     )
    
     
-    if ENCODER_WEIGHTS is None and os.path.exists(PRETRAINED_PATH):
+    if os.path.exists(PRETRAINED_PATH):
         print(f"Loading pretrained encoder weights from: {PRETRAINED_PATH}")
         try:
             state_dict = torch.load(PRETRAINED_PATH, map_location=DEVICE)
@@ -556,34 +497,34 @@ if __name__ == '__main__':
     ### 4. 循环训练########
     max_score = 0
     model.to(DEVICE)
-    for i in range(1):
+    for i in range(120):
         print(f'\nEpoch: {i}')
-        # model.train()
-        # train_epoch_loss = 0
-        # train_epoch_iou = 0
-        # with tqdm(train_loader, desc='Train', unit='batch') as tepoch:
-        #     for image, mask in tepoch:
-        #         tepoch.set_description(f"Epoch {i} [Train]")
-        #         image = image.to(DEVICE).float()
-        #         mask = mask.to(DEVICE).permute(0, 3, 1, 2)
+        model.train()
+        train_epoch_loss = 0
+        train_epoch_iou = 0
+        with tqdm(train_loader, desc='Train', unit='batch') as tepoch:
+            for image, mask in tepoch:
+                tepoch.set_description(f"Epoch {i} [Train]")
+                image = image.to(DEVICE).float()
+                mask = mask.to(DEVICE).permute(0, 3, 1, 2)
 
-        #         optimizer.zero_grad()
-        #         output = model(image)
-        #         loss_train = loss(output, mask)
-        #         loss_train.backward()
-        #         optimizer.step()
+                optimizer.zero_grad()
+                output = model(image)
+                loss_train = loss(output, mask)
+                loss_train.backward()
+                optimizer.step()
 
-        #         tp, fp, fn, tn = smp.metrics.get_stats(output, mask.long(), mode='multilabel', threshold=0.5)
-        #         iou_score = smp.metrics.iou_score(tp, fp, fn, tn, reduction='micro')
+                tp, fp, fn, tn = smp.metrics.get_stats(output, mask.long(), mode='multilabel', threshold=0.5)
+                iou_score = smp.metrics.iou_score(tp, fp, fn, tn, reduction='micro')
 
-        #         train_epoch_loss += loss_train.item()
-        #         train_epoch_iou += iou_score.item()
+                train_epoch_loss += loss_train.item()
+                train_epoch_iou += iou_score.item()
 
-        #         tepoch.set_postfix(loss=loss_train.item(), iou=iou_score.item())
+                tepoch.set_postfix(loss=loss_train.item(), iou=iou_score.item())
 
-        # avg_train_loss = train_epoch_loss / len(train_loader)
-        # avg_train_iou = train_epoch_iou / len(train_loader)
-        # print(f"Train Loss: {avg_train_loss:.4f}, Train IoU: {avg_train_iou:.4f}")
+        avg_train_loss = train_epoch_loss / len(train_loader)
+        avg_train_iou = train_epoch_iou / len(train_loader)
+        print(f"Train Loss: {avg_train_loss:.4f}, Train IoU: {avg_train_iou:.4f}")
 
         model.eval()
         valid_epoch_loss = 0
@@ -603,10 +544,10 @@ if __name__ == '__main__':
                     loss_val = loss(output, mask)
 
                     tp, fp, fn, tn = smp.metrics.get_stats(output, mask.long(), mode='multilabel', threshold=0.5)
-                    iou_score = smp.metrics.iou_score(tp, fp, fn, tn, reduction='macro')
-                    precision_score = smp.metrics.functional.precision(tp, fp, fn, tn,reduction='macro')
-                    recall_score = smp.metrics.functional.recall(tp, fp, fn, tn, reduction='macro')
-                    f1_score = smp.metrics.f1_score(tp, fp, fn, tn, reduction='macro')
+                    iou_score = smp.metrics.iou_score(tp, fp, fn, tn, reduction='micro')
+                    precision_score = smp.metrics.functional.precision(tp, fp, fn, tn,reduction='micro')
+                    recall_score = smp.metrics.functional.recall(tp, fp, fn, tn, reduction='micro')
+                    f1_score = smp.metrics.f1_score(tp, fp, fn, tn, reduction='micro')
 
                     valid_epoch_loss += loss_val.item()
                     valid_epoch_iou += iou_score.item()
@@ -624,8 +565,6 @@ if __name__ == '__main__':
 
         print(f"Valid Loss: {avg_valid_loss:.4f}, Valid IoU: {avg_valid_iou:.4f}, Valid Precision: {avg_valid_precision:.4f}, Valid Recall: {avg_valid_recall:.4f}, Valid f1score: {avg_valid_f1_score:.4f}")
         lr_scheduler.step()
-
-        exit(0)
   
 
         if max_score < avg_valid_iou:
